@@ -1,12 +1,9 @@
 [package]
-name = "p1403"
+name = "client"
 version = "0.1.0"
-authors = ["Charles Inwald <cci219@lehigh.edu>"]
+authors = ["ec2-user"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-structopt = "0.2.10" #For parsing command line arguments
-config = "0.10.1" #For config files
-
