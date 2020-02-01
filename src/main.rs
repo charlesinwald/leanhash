@@ -5,14 +5,27 @@ use std::collections::HashMap;
 use config::Value;
 use std::string::ToString;
 use std::net::UdpSocket;
-
+use std::str;
 //use std::sync::{Mutex, RwLock, Arc};
+#[macro_use]
+extern crate serde_derive;
+extern crate bincode;
+
+use bincode::{serialize, deserialize};
 
 #[derive(StructOpt)]
 struct Cli {
     /// The pattern to look for
     #[structopt(default_value = "foobar", long)]
     operation: String,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct Packet<'a> {
+    operation: bool, //get = false, put = true
+    key: i32,
+    val_len: i32,
+    val: &'a [u8],
 }
 
 #[derive(Debug)]
@@ -40,7 +53,7 @@ fn main() {
         println!("{:#?}", ip_array.1);
 
     {
-        let mut socket = UdpSocket::bind("127.0.0.1:34254").expect("Error creating socket on 127.0.0.1:34254");
+        let socket = UdpSocket::bind("127.0.0.1:34254").expect("Error creating socket on 127.0.0.1:34254");
 
         // Thread Safe version
         //let mut cc = Arc::new(RwLock::new(HashMap::new()));
@@ -54,11 +67,15 @@ fn main() {
         }
 
         loop {
-            let mut buf = [0; 10];
+            //Make a buffer, and recieve UDP data over the socket
+            let mut buf = [0; 256];
             let (number_of_bytes, src_addr) = socket.recv_from(&mut buf)
                 .expect("Didn't receive data");
+            //Remove any excess unused bytes
             let filled_buf = &mut buf[..number_of_bytes];
-            println!("Recieved: {:#?}",&buf);
+            let rec_packet : Packet = bincode::deserialize(filled_buf).expect("Malformed Packet, unable to deserialize");
+            println!("Recieved: {:?}",str::from_utf8(&filled_buf).unwrap());
+            println!("Recieved: {:?}", rec_packet);
         }
     }
 }

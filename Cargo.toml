@@ -9,4 +9,6 @@ edition = "2018"
 [dependencies]
 structopt = "0.2.10" #For parsing command line arguments
 config = "0.10.1" #For config files
-
+bincode = "1.2.1"
+serde_derive = "1.0.27"
+serde = "1.0.63"
