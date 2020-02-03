@@ -28,7 +28,7 @@ struct Packet<'a> {
     val: &'a [u8],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 enum Val<'a> {
     String(&'a str),
     Integer(i32),
@@ -42,10 +42,10 @@ fn main() {
 //  Load Config
         let mut settings = config::Config::default();
         settings
-            // Add in `./Settings.toml`
+            // Add in `./iplist`
             .merge(config::File::with_name("Settings")).unwrap();
         // Print out our settings (as a HashMap)
-        let settings_map = settings.try_into::<HashMap<String, Vec<Value>>>().expect("Error reading Settings.toml");
+        let settings_map = settings.try_into::<HashMap<String, Vec<Value>>>().expect("Error reading iplist");
         let config_map = settings_map;
 //    println!("{:?}",
 //             config_map);
