@@ -67,15 +67,15 @@ fn main() {
         }
 
         loop {
-            //Make a buffer, and recieve UDP data over the socket
+            //Make a buffer, and receive UDP data over the socket
             let mut buf = [0; 256];
             let (number_of_bytes, src_addr) = socket.recv_from(&mut buf)
                 .expect("Didn't receive data");
             //Remove any excess unused bytes
             let filled_buf = &mut buf[..number_of_bytes];
             let rec_packet : Packet = bincode::deserialize(filled_buf).expect("Malformed Packet, unable to deserialize");
-            println!("Recieved: {:?}",str::from_utf8(&filled_buf).unwrap());
             println!("Recieved: {:?}", rec_packet);
+            println!("Recieved: {:?}",str::from_utf8(rec_packet.val).unwrap());
         }
     }
 }
