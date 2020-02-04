@@ -53,7 +53,7 @@ fn main() {
         println!("{:#?}", ip_array.1);
 
     {
-        let socket = UdpSocket::bind("127.0.0.1:34254").expect("Error creating socket on 127.0.0.1:34254");
+        let socket = UdpSocket::bind("0.0.0.0:34254").expect("Error creating socket on 127.0.0.1:34254");
 
         // Thread Safe version
         //let mut cc = Arc::new(RwLock::new(HashMap::new()));
