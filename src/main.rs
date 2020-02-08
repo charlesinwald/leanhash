@@ -7,7 +7,8 @@ use std::string::ToString;
 use std::net::UdpSocket;
 use std::str;
 
-//use std::sync::{Mutex, RwLock, Arc};
+use std::sync::{Mutex, RwLock, Arc};
+
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
@@ -34,7 +35,7 @@ struct Packet<'a> {
     val: &'a [u8],
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Hash)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Hash, Clone, Copy)]
 enum Val<'a> {
     String(&'a str),
     Integer(i32),
@@ -67,8 +68,8 @@ fn main() {
         let socket = UdpSocket::bind("0.0.0.0:34254").expect("Error creating socket on 127.0.0.1:34254");
 
         // Thread Safe version
-        //let mut cc = Arc::new(RwLock::new(HashMap::new()));
-        let mut cc: HashMap<i32, Val> = HashMap::new();
+        let mut cc = Arc::new(RwLock::new(HashMap::new()));
+//        let mut cc: HashMap<i32, Val> = HashMap::new();
 
         loop {
             //Make a buffer, and receive UDP data over the socket
@@ -83,29 +84,50 @@ fn main() {
 
             //Put request
             if rec_packet.operation == false {
-                let key = rec_packet.key.clone();
-                let value;
+                loop {
+                    let key = rec_packet.key.clone();
+                    let value;
 //                if !rec_packet.is_int {
 //                    value = Val::String(str::from_utf8(rec_packet.val).unwrap());
 //                } else {
-                value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-                let result = cc.insert(key, value);
-                match result {
-                    Some(x) => {
+                    value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
+                    let map = cc.read().expect("RwLock poisoned");
+                    //Key exists
+                    if let Some(element) = map.get(&key) {
+                        println!("Exists");
+                        drop(map); //Let go of lock
                         //Send "False", as a byte
                         socket.send_to(&[0], src_addr);
+                        break;
                     }
-                    //Send "True" as a byte
-                    None => { socket.send_to(&[1], src_addr); }
+                    //Key doesn't exist
+                    else {
+                        println!("Doesn't exist");
+                        //Drop read lock...
+                        drop(map);
+                        //...in favor of a write lock
+                        let mut map = cc.write().expect("RwLock poisoned");
+                        map.insert(key, Mutex::new(value));
+                        //Send "True" as a byte
+                        socket.send_to(&[1], src_addr);
+                    }
                 }
-                for v in cc.values() {
-                    println!("{:?}", v);
-                }
+                //let result = map.insert(key, value);
+//                match result {
+//                    Some(x) => {
+//
+//                    }
+//                    None => {  }
+//                }
+//                for v in cc.values() {
+//                    println!("{:?}", v);
+//                }
             }
             //Get request
             else {
-                let key : i32 = rec_packet.key.clone();
-                let value = cc.get(&key);
+                let key: i32 = rec_packet.key.clone();
+                let map = cc.read().expect("RwLock poisoned");
+                let value = map.get(&key);
                 match value {
                     Some(x) => {
                         let packet = bincode::serialize(x).expect("invalid value");
