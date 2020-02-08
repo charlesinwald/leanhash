@@ -18,7 +18,7 @@ use std::ptr::null;
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct Packet<'a> {
     operation: bool,
-    //get = false, put = true
+    //put = false, get = true
     is_int: bool,
     key: i32,
     val: &'a [u8],
@@ -28,6 +28,12 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
     let mut s = DefaultHasher::new();
     t.hash(&mut s);
     s.finish()
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Hash, Clone, Copy)]
+enum Val<'a> {
+    String(&'a str),
+    Integer(i32),
 }
 
 fn send_put_packet(address: &str, packet: &Packet) {
@@ -64,7 +70,8 @@ fn send_get_packet(address: &str, packet: &Packet) {
         println!("null");
     }
     else {
-        println!("{:#?}", filled_buf);
+        let value : Val = bincode::deserialize(filled_buf).unwrap();
+        println!("{:#?}", value);
     }
 }
 //fn self_send_packet(packet: &Packet) {

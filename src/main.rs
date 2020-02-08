@@ -29,7 +29,7 @@ struct Cli {
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Packet<'a> {
     operation: bool,
-    //get = false, put = true
+    //put = false, get = true
     is_int: bool,
     key: i32,
     val: &'a [u8],
@@ -110,36 +110,27 @@ fn main() {
                         map.insert(key, Mutex::new(value));
                         //Send "True" as a byte
                         socket.send_to(&[1], src_addr);
+                        break;
                     }
                 }
-                //let result = map.insert(key, value);
-//                match result {
-//                    Some(x) => {
-//
-//                    }
-//                    None => {  }
-//                }
-//                for v in cc.values() {
-//                    println!("{:?}", v);
-//                }
             }
-            //Get request
-            else {
-                let key: i32 = rec_packet.key.clone();
-                let map = cc.read().expect("RwLock poisoned");
-                let value = map.get(&key);
-                match value {
-                    Some(x) => {
-                        let packet = bincode::serialize(x).expect("invalid value");
-                        socket.send_to(&packet, src_addr);
-                    }
-                    None => {
-                        println!("Value not found");
-                        socket.send_to(&[0], src_addr);
+                //Get request
+                else {
+                    let key: i32 = rec_packet.key.clone();
+                    let map = cc.read().expect("RwLock poisoned");
+                    let value = map.get(&key);
+                    match value {
+                        Some(x) => {
+                            let packet = bincode::serialize(x).expect("invalid value");
+                            socket.send_to(&packet, src_addr);
+                        }
+                        None => {
+                            println!("Value not found");
+                            socket.send_to(&[0], src_addr);
+                        }
                     }
                 }
             }
         }
     }
-}
 
