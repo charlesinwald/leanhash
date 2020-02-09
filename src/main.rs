@@ -104,7 +104,7 @@ fn handlePacket(socket: &UdpSocket, cc: &mut Arc<RwLock<HashMap<i32, Mutex<Val>,
             let map = cc.read().expect("RwLock poisoned");
             //Key exists
             if let Some(element) = map.get(&key) {
-                println!("Exists");
+//                println!("Exists");
                 drop(map); //Let go of lock
                 //Send "False", as a byte
                 socket.send_to(&[0], src_addr);
@@ -112,7 +112,7 @@ fn handlePacket(socket: &UdpSocket, cc: &mut Arc<RwLock<HashMap<i32, Mutex<Val>,
             }
             //Key doesn't exist
             else {
-                println!("Doesn't exist");
+//                println!("Doesn't exist");
                 //Drop read lock...
                 drop(map);
                 //...in favor of a write lock
@@ -135,7 +135,7 @@ fn handlePacket(socket: &UdpSocket, cc: &mut Arc<RwLock<HashMap<i32, Mutex<Val>,
                 socket.send_to(&packet, src_addr);
             }
             None => {
-                println!("Value not found");
+//                println!("Value not found");
                 socket.send_to(&[0], src_addr);
             }
         }
