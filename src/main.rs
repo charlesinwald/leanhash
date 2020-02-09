@@ -7,17 +7,21 @@ use std::string::ToString;
 use std::net::UdpSocket;
 use std::str;
 
-use std::sync::{Mutex, RwLock, Arc};
+use std::sync::{Mutex, RwLock, Arc, mpsc};
 
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
 
+use std::{thread, time::Duration};
+use std::collections::hash_map::RandomState;
+use std::net::SocketAddr;
 use bincode::{serialize, deserialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hasher, Hash};
 use std::borrow::{BorrowMut, Borrow};
 use std::convert::TryInto;
+use std::sync::mpsc::{Sender, Receiver, SyncSender};
 
 #[derive(StructOpt)]
 struct Cli {
@@ -64,73 +68,79 @@ fn main() {
     let ip_array = config_map.get_key_value("ips").expect("Error reading list of node ips");
     println!("{:#?}", ip_array.1);
 
-    {
-        let socket = UdpSocket::bind("0.0.0.0:34254").expect("Error creating socket on 127.0.0.1:34254");
 
-        // Thread Safe version
-        let mut cc = Arc::new(RwLock::new(HashMap::new()));
+//    let mut joins = Vec::new();
+    let socket = UdpSocket::bind("0.0.0.0:34254").expect("Error creating socket on 127.0.0.1:34254");
+    let (sender, receiver): (Sender<Packet>, Receiver<Packet>) = mpsc::channel();
+
+
+    // Thread Safe version
+    let mut cc: Arc<RwLock<HashMap<i32, Mutex<Val>>>> = Arc::new(RwLock::new(HashMap::new()));
 //        let mut cc: HashMap<i32, Val> = HashMap::new();
+    loop {
+        let mut buf = [0; 256];
+        //Make a buffer, and receive UDP data over the socket
+        let (number_of_bytes, src_addr) = socket.recv_from(&mut buf)
+            .expect("Didn't receive data");
+        //Remove any excess unused bytes
+        let filled_buf = &mut buf[..number_of_bytes];
 
+        let mut rec_packet: Packet = bincode::deserialize(filled_buf).expect("Malformed Packet, unable to deserialize");
+
+
+        handlePacket(&socket, &mut cc, src_addr, rec_packet)
+    }
+}
+
+fn handlePacket(socket: &UdpSocket, cc: &mut Arc<RwLock<HashMap<i32, Mutex<Val>, RandomState>>>, src_addr: SocketAddr, mut rec_packet: Packet) -> () {
+//Put request
+    if rec_packet.operation == false {
         loop {
-            //Make a buffer, and receive UDP data over the socket
-            let mut buf = [0; 256];
-            let (number_of_bytes, src_addr) = socket.recv_from(&mut buf)
-                .expect("Didn't receive data");
-            //Remove any excess unused bytes
-
-            let filled_buf = &mut buf[..number_of_bytes];
-
-            let mut rec_packet: Packet = bincode::deserialize(filled_buf).expect("Malformed Packet, unable to deserialize");
-
-            //Put request
-            if rec_packet.operation == false {
-                loop {
-                    let key = rec_packet.key.clone();
-                    let value;
+            let key = rec_packet.key.clone();
+            let value;
 //                if !rec_packet.is_int {
 //                    value = Val::String(str::from_utf8(rec_packet.val).unwrap());
 //                } else {
-                    value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-                    let map = cc.read().expect("RwLock poisoned");
-                    //Key exists
-                    if let Some(element) = map.get(&key) {
-                        println!("Exists");
-                        drop(map); //Let go of lock
-                        //Send "False", as a byte
-                        socket.send_to(&[0], src_addr);
-                        break;
-                    }
-                    //Key doesn't exist
-                    else {
-                        println!("Doesn't exist");
-                        //Drop read lock...
-                        drop(map);
-                        //...in favor of a write lock
-                        let mut map = cc.write().expect("RwLock poisoned");
-                        map.insert(key, Mutex::new(value));
-                        //Send "True" as a byte
-                        socket.send_to(&[1], src_addr);
-                        break;
-                    }
-                }
+            value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
+            let map = cc.read().expect("RwLock poisoned");
+            //Key exists
+            if let Some(element) = map.get(&key) {
+                println!("Exists");
+                drop(map); //Let go of lock
+                //Send "False", as a byte
+                socket.send_to(&[0], src_addr);
+                break;
             }
-                //Get request
-                else {
-                    let key: i32 = rec_packet.key.clone();
-                    let map = cc.read().expect("RwLock poisoned");
-                    let value = map.get(&key);
-                    match value {
-                        Some(x) => {
-                            let packet = bincode::serialize(x).expect("invalid value");
-                            socket.send_to(&packet, src_addr);
-                        }
-                        None => {
-                            println!("Value not found");
-                            socket.send_to(&[0], src_addr);
-                        }
-                    }
-                }
+            //Key doesn't exist
+            else {
+                println!("Doesn't exist");
+                //Drop read lock...
+                drop(map);
+                //...in favor of a write lock
+                let mut map = cc.write().expect("RwLock poisoned");
+                map.insert(key, Mutex::new(value));
+                //Send "True" as a byte
+                socket.send_to(&[1], src_addr);
+                break;
             }
         }
     }
+    //Get request
+    else {
+        let key: i32 = rec_packet.key.clone();
+        let map = cc.read().expect("RwLock poisoned");
+        let value = map.get(&key);
+        match value {
+            Some(x) => {
+                let packet = bincode::serialize(x).expect("invalid value");
+                socket.send_to(&packet, src_addr);
+            }
+            None => {
+                println!("Value not found");
+                socket.send_to(&[0], src_addr);
+            }
+        }
+    }
+}
+
 
