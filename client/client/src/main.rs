@@ -122,7 +122,7 @@ fn main() -> std::io::Result<()> {
         println!("{:#?} {}", ip_list_vec, num_nodes);
         println!("This Node's IP:{}",this_ip);
 
-        let max_key = 1000;
+        let max_key = 10;
         //Workaround for not having a proper randomization function
         let mut random_num = get_random_key(max_key);
         println!("epoch {}", random_num);
