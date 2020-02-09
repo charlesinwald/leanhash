@@ -4,14 +4,30 @@ use std::env;
 use std::fs;
 
 #[macro_use]
+//For serializing/deserializing binary
 extern crate serde_derive;
 extern crate bincode;
+//For random numbers
+//Parsing command line arguments
+use structopt::StructOpt;
+//For random number generation since I don't have enough AWS RAM to compile the standard rust
+//random number library...
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use bincode::{serialize, deserialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::convert::TryInto;
 use std::ptr::null;
+
+
+#[derive(StructOpt)]
+struct Cli {
+    /// Number of operations
+    #[structopt(default_value = "10000", short,long, help = "Pass `-h` and you'll see me!")]
+    operations: f64,
+}
+
 
 //TODO have enum so you can specify the type of data being saved in val, instead of assuming string
 
@@ -84,6 +100,12 @@ fn send_get_packet(address: &str, packet: &Packet) {
 
 fn main() -> std::io::Result<()> {
     {
+        let args = Cli::from_args();
+        let operations: f64 = args.operations;
+        println!("{:#?}", operations);
+
+
+
         //Retrieve list of ips
         let ip_list_string = fs::read_to_string("iplist").expect("Could not read in node ip list");
         let ip_list_vec = ip_list_string.split("\n").collect::<Vec<&str>>();
@@ -95,6 +117,38 @@ fn main() -> std::io::Result<()> {
         let this_ip = ip_list_vec[0];
         println!("{:#?} {}", ip_list_vec, num_nodes);
         println!("This Node's IP:{}",this_ip);
+
+        //Workaround for not having a proper randomization function
+        let mut random_num = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        println!("nanos: {}", random_num % 5000);
+
+        let putNum : i32 = (0.4 * operations).round() as i32;
+        println!("{}",putNum);
+        let getNum : i32 = (operations - (putNum as f64)) as i32;
+        println!("{}",getNum);
+
+        for i in 0..2500 {
+            random_num = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos();
+            let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
+            let packet = Packet {operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
+            send_put_packet(dest_ip, &packet);
+//            random_num = SystemTime::now()
+//                .duration_since(UNIX_EPOCH)
+//                .unwrap()
+//                .subsec_nanos();
+        }
+
+//        while getNum > 0 {
+//
+//        }
+//
+
         //Entry to be sent
         let key = 42;
         let value = 5_i32;

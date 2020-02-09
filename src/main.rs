@@ -23,12 +23,12 @@ use std::borrow::{BorrowMut, Borrow};
 use std::convert::TryInto;
 use std::sync::mpsc::{Sender, Receiver, SyncSender};
 
-#[derive(StructOpt)]
-struct Cli {
-    /// The pattern to look for
-    #[structopt(default_value = "foobar", long)]
-    operation: String,
-}
+//#[derive(StructOpt)]
+//struct Cli {
+//    /// The pattern to look for
+//    #[structopt(default_value = "foobar", long)]
+//    operation: String,
+//}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Packet<'a> {
@@ -52,8 +52,8 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 }
 
 fn main() {
-    let args = Cli::from_args();
-    println!("operation {}", &args.operation);
+//    let args = Cli::from_args();
+//    println!("operation {}", &args.operation);
 
     //  Load Config
     let mut settings = config::Config::default();
