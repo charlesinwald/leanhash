@@ -87,7 +87,6 @@ fn main() {
 
         let mut rec_packet: Packet = bincode::deserialize(filled_buf).expect("Malformed Packet, unable to deserialize");
 
-
         handlePacket(&socket, &mut cc, src_addr, rec_packet)
     }
 }
