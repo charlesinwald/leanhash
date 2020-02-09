@@ -17,15 +17,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use bincode::{serialize, deserialize};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::convert::TryInto;
+//use std::convert::TryInto;
 use std::ptr::null;
-
+use std::time::{Duration, Instant};
 
 #[derive(StructOpt)]
 struct Cli {
     /// Number of operations
-    #[structopt(default_value = "10000", short,long, help = "Pass `-h` and you'll see me!")]
+    #[structopt(default_value = "100000", short,long, help = "Pass `-h` and you'll see me!")]
     operations: f64,
+    #[structopt(default_value = "10", short,long, help = "Pass `-h` and you'll see me!")]
+    max_key: u32
 }
 
 
@@ -57,6 +59,7 @@ fn send_put_packet(address: &str, packet: &Packet) -> i32 {
 //    println!("Packet to Send: {:#?} \n", packet);
     let mut socket = UdpSocket::bind("0.0.0.0:34255").expect("Failed to bind to UDP socket.");
     let bytes_to_send = serialize(&packet).unwrap();
+//    println!("{}", address);
     socket.connect(address).expect("Error connecting");
     socket.send(&bytes_to_send).expect("couldn't send message");
     let mut buf = [0; 256];
@@ -106,7 +109,7 @@ fn main() -> std::io::Result<()> {
     {
         let args = Cli::from_args();
         let operations: f64 = args.operations;
-        println!("{:#?}", operations);
+        println!("Operations: {:#?}", operations);
 
 
 
@@ -119,25 +122,27 @@ fn main() -> std::io::Result<()> {
             std::process::exit(1);
         }
         let this_ip = ip_list_vec[0];
-        println!("{:#?} {}", ip_list_vec, num_nodes);
-        println!("This Node's IP:{}",this_ip);
+//        println!("{:#?} {}", ip_list_vec, num_nodes);
+//        println!("This Node's IP:{}",this_ip);
 
-        let max_key = 10;
+        let max_key : u32 = args.max_key;
         //Workaround for not having a proper randomization function
         let mut random_num = get_random_key(max_key);
-        println!("epoch {}", random_num);
-        println!("nanos: {}", random_num % max_key);
+//        println!("epoch {}", random_num);
+//        println!("nanos: {}", random_num % max_key);
 
         let mut putNum : i32 = (0.4 * operations).round() as i32;
         let putTotal = putNum.clone();
-        println!("{}",putNum);
+        println!("Puts {}",putNum);
         let mut getNum : i32 = (operations - (putNum as f64)) as i32;
         let getTotal = getNum.clone();
 
-        println!("{}",getNum);
+        println!("Gets {}",getNum);
 
         //Prepopulate hash tables
-        for i in 0..2500 {
+        let prepopulated_keys = (max_key / 2);
+        println!("Prepopulated Keys: {}",prepopulated_keys);
+        for i in 0..prepopulated_keys {
             random_num = get_random_key(max_key);
             let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
             let packet = Packet {operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
@@ -148,16 +153,24 @@ fn main() -> std::io::Result<()> {
 //                .subsec_nanos();
         }
 
+//        let mut successfulGet : i32 = 0;
+//        let mut successfulPut : i32 = 0;
 
-        println!("\n \n Operations: \n");
-        let mut successfulGet : i32 = 0;
-        let mut successfulPut : i32 = 0;
+        let start = Instant::now();
+//        let start_time: i32 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as i32;
+//        println!("Start Time: {}", start_time);
         while getNum > 0 {
+            println!("Get Key");
             random_num = get_random_key(max_key);
+            println!("{}",random_num);
             let packet = Packet { operation: true, key: random_num as i32, is_int: true, val: &[0] };
             let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
-            successfulGet += send_get_packet(dest_ip, &packet);
+            println!("{}",dest_ip);
+
+//            successfulGet +=
+            send_get_packet(dest_ip, &packet);
             getNum = getNum-1;
+            println!("{}", getNum);
             if putNum > 0 {
                 random_num = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -165,12 +178,19 @@ fn main() -> std::io::Result<()> {
                     .subsec_nanos() % max_key;
                 let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
                 let packet = Packet {operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
-                successfulPut += send_put_packet(dest_ip, &packet);
+//                successfulPut +=
+                send_put_packet(dest_ip, &packet);
                 putNum = putNum-1;
             }
         }
-        println!("Successful Puts: {}/{}", successfulPut, putTotal);
-        println!("Successful Gets: {}/{}", successfulGet, getTotal);
+        let end = start.elapsed();
+//        let end_time : i32 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as i32;
+//        println!("End Time: {}", end_time);
+//        let operation_time : i32= (end_time - start_time) as i32;
+//        let operation_time_ms : i32 = (operation_time / 1000000);
+        println!("Total Time(milliseconds): {}", end.as_millis());
+//        println!("Successful Puts: {}/{}", successfulPut, putTotal);
+//        println!("Successful Gets: {}/{}", successfulGet, getTotal);
 
 //
 
