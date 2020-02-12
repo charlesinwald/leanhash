@@ -1,5 +1,5 @@
 use std::net::{UdpSocket, ToSocketAddrs, SocketAddr, Ipv4Addr, IpAddr};
-use std::mem;
+use std::{mem, thread, time};
 use std::env;
 use std::fs;
 
@@ -7,6 +7,7 @@ use std::fs;
 //For serializing/deserializing binary
 extern crate serde_derive;
 extern crate bincode;
+
 //For random numbers
 //Parsing command line arguments
 use structopt::StructOpt;
@@ -24,10 +25,10 @@ use std::time::{Duration, Instant};
 #[derive(StructOpt)]
 struct Cli {
     /// Number of operations
-    #[structopt(default_value = "100000", short,long, help = "Pass `-h` and you'll see me!")]
+    #[structopt(default_value = "5000", short, long, help = "Pass `-h` and you'll see me!")]
     operations: f64,
-    #[structopt(default_value = "10", short,long, help = "Pass `-h` and you'll see me!")]
-    max_key: u32
+    #[structopt(default_value = "10000", short, long, help = "Pass `-h` and you'll see me!")]
+    max_key: u32,
 }
 
 
@@ -69,14 +70,13 @@ fn send_put_packet(address: &str, packet: &Packet) -> i32 {
     if filled_buf == [0] {
 //        println!("false");
         return 0;
-    }
-    else {
+    } else {
 //        println!("true");
         return 1;
     }
 }
 
-fn send_get_packet(address: &str, packet: &Packet)  -> i32 {
+fn send_get_packet(address: &str, packet: &Packet) -> i32 {
 //    println!("Destination Address {:#?}", address);
 //    println!("Packet to Send: {:#?} \n", packet);
     let mut socket = UdpSocket::bind("0.0.0.0:34255").expect("Failed to bind to UDP socket.");
@@ -88,12 +88,11 @@ fn send_get_packet(address: &str, packet: &Packet)  -> i32 {
     let filled_buf = &mut buf[..amt];
 //    println!("{:#?}",filled_buf);
     if filled_buf == [0] {
-//        println!("null");
+        println!("null");
         return 0;
-    }
-    else {
-        let value : Val = bincode::deserialize(filled_buf).unwrap();
-//        println!("{:#?}", value);
+    } else {
+        let value: Val = bincode::deserialize(filled_buf).unwrap();
+        println!("{:#?}", value);
         return 1;
     }
 }
@@ -112,7 +111,6 @@ fn main() -> std::io::Result<()> {
         println!("Operations: {:#?}", operations);
 
 
-
         //Retrieve list of ips
         let ip_list_string = fs::read_to_string("iplist").expect("Could not read in node ip list");
         let ip_list_vec = ip_list_string.split("\n").collect::<Vec<&str>>();
@@ -125,11 +123,11 @@ fn main() -> std::io::Result<()> {
 //        println!("{:#?} {}", ip_list_vec, num_nodes);
 //        println!("This Node's IP:{}",this_ip);
 
-        let max_key : u32 = args.max_key;
+        let max_key: u32 = args.max_key;
         //Workaround for not having a proper randomization function
         let mut random_num = get_random_key(max_key);
-//        println!("epoch {}", random_num);
-//        println!("nanos: {}", random_num % max_key);
+        println!("epoch {}", random_num);
+        println!("nanos: {}", random_num % max_key);
 
         let mut putNum : i32 = (0.4 * operations).round() as i32;
         let putTotal = putNum.clone();
@@ -160,17 +158,17 @@ fn main() -> std::io::Result<()> {
 //        let start_time: i32 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as i32;
 //        println!("Start Time: {}", start_time);
         while getNum > 0 {
-            println!("Get Key");
+//            println!("Get Key");
             random_num = get_random_key(max_key);
-            println!("{}",random_num);
+//            println!("{}",random_num);
             let packet = Packet { operation: true, key: random_num as i32, is_int: true, val: &[0] };
             let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
-            println!("{}",dest_ip);
+//            println!("{}",dest_ip);
 
 //            successfulGet +=
             send_get_packet(dest_ip, &packet);
             getNum = getNum-1;
-            println!("{}", getNum);
+//            println!("{}", getNum);
             if putNum > 0 {
                 random_num = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -193,27 +191,34 @@ fn main() -> std::io::Result<()> {
 //        println!("Successful Gets: {}/{}", successfulGet, getTotal);
 
 //
-
-//        //Entry to be sent
-//        let key = 42;
-//        let value = 5_i32;
-//        //Fill in packet
-//        let packet = Packet { operation: false, key, is_int: true, val: &value.to_ne_bytes() };
-
-        //Calculate hash value to figure out where the value should go
-//        let hash = calculate_hash(&key);
-//        let dest_node = hash % num_nodes;
-//        println!("Hash: {}", hash);
-//        println!("Destination Node: {}", dest_node);
-//        let mut dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
-//        send_put_packet(&dest_ip, &packet);
+//        for i in 0..10 {
+////            println!("{}", i);
+//            //Entry to be sent
+//            let key = 42;
+//            let value = 5_i32 + i;
+//            println!("{}",value);
+//            //Fill in packet
+//            let packet = Packet { operation: false, key, is_int: true, val: &value.to_ne_bytes() };
 //
 //
-//        let packet = Packet { operation: true, key, is_int: true, val: &[0] };
-//        dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
-//        send_get_packet(&dest_ip, &packet);
+//            //Calculate hash value to figure out where the value should go
+//            let hash = calculate_hash(&key);
+//            let dest_node = hash % num_nodes;
+//            println!("Hash: {}", hash);
+//            println!("Destination Node: {}", dest_node);
+//            let mut dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
+//            send_put_packet(&dest_ip, &packet);
+//
+//            thread::sleep(time::Duration::from_millis(2000));
+//
+//            let packet = Packet { operation: true, key, is_int: true, val: &[0] };
+//            dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
+//            send_get_packet(&dest_ip, &packet);
+//        }
+//            send_get_packet(&dest_ip, &packet);
 
 
+//
     } // the socket is closed here
     Ok(())
 }
