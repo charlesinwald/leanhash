@@ -87,7 +87,7 @@ fn main() {
         match socket.recv_from(&mut buf) {
             Ok((amt, src)) => {
                 thread::spawn(move || {
-                    println!("Handling connection from {}, {} bytes", src, amt);
+//                    println!("Handling connection from {}, {} bytes", src, amt);
                     let filled_buf = &mut buf[..amt];
                     let mut rec_packet: Packet = bincode::deserialize(&filled_buf).expect("Malformed Packet, unable to deserialize");
 //                    let map = map_clone.read().expect("RwLock poisoned");

@@ -88,11 +88,11 @@ fn send_get_packet(address: &str, packet: &Packet) -> i32 {
     let filled_buf = &mut buf[..amt];
 //    println!("{:#?}",filled_buf);
     if filled_buf == [0] {
-        println!("null");
+//        println!("null");
         return 0;
     } else {
         let value: Val = bincode::deserialize(filled_buf).unwrap();
-        println!("{:#?}", value);
+//        println!("{:#?}", value);
         return 1;
     }
 }
