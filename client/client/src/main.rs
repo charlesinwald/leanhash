@@ -3,6 +3,8 @@ use std::{mem, thread, time};
 use std::env;
 use std::fs;
 
+
+
 #[macro_use]
 //For serializing/deserializing binary
 extern crate serde_derive;
@@ -25,9 +27,9 @@ use std::time::{Duration, Instant};
 #[derive(StructOpt)]
 struct Cli {
     /// Number of operations
-    #[structopt(default_value = "5000", short, long, help = "Pass `-h` and you'll see me!")]
+    #[structopt(default_value = "1000", short, long, help = "Pass `-h` and you'll see me!")]
     operations: f64,
-    #[structopt(default_value = "10000", short, long, help = "Pass `-h` and you'll see me!")]
+    #[structopt(default_value = "1000", short, long, help = "Pass `-h` and you'll see me!")]
     max_key: u32,
 }
 
@@ -96,12 +98,7 @@ fn send_get_packet(address: &str, packet: &Packet) -> i32 {
         return 1;
     }
 }
-//fn self_send_packet(packet: &Packet) {
-//    println!("{:#?}", packet);
-//    let mut socket = UdpSocket::bind("127.0.0.1:34255").expect("Failed to bind to UDP socket.");
-//    let bytes_to_send = serialize(&packet).unwrap();
-//    let result = socket.send_to(&bytes_to_send, "0.0.0.0:34254").expect("Failed to send packet");
-//}
+
 
 
 fn main() -> std::io::Result<()> {
@@ -145,10 +142,6 @@ fn main() -> std::io::Result<()> {
             let mut dest_ip = ip_list_vec[((calculate_hash(&random_num) % num_nodes) + 1) as usize];
             let packet = Packet {operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
             send_put_packet(dest_ip, &packet);
-//            random_num = SystemTime::now()
-//                .duration_since(UNIX_EPOCH)
-//                .unwrap()
-//                .subsec_nanos();
         }
 
 //        let mut successfulGet : i32 = 0;
@@ -189,34 +182,6 @@ fn main() -> std::io::Result<()> {
         println!("Total Time(milliseconds): {}", end.as_millis());
 //        println!("Successful Puts: {}/{}", successfulPut, putTotal);
 //        println!("Successful Gets: {}/{}", successfulGet, getTotal);
-
-//
-//        for i in 0..10 {
-////            println!("{}", i);
-//            //Entry to be sent
-//            let key = 42;
-//            let value = 5_i32 + i;
-//            println!("{}",value);
-//            //Fill in packet
-//            let packet = Packet { operation: false, key, is_int: true, val: &value.to_ne_bytes() };
-//
-//
-//            //Calculate hash value to figure out where the value should go
-//            let hash = calculate_hash(&key);
-//            let dest_node = hash % num_nodes;
-//            println!("Hash: {}", hash);
-//            println!("Destination Node: {}", dest_node);
-//            let mut dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
-//            send_put_packet(&dest_ip, &packet);
-//
-//            thread::sleep(time::Duration::from_millis(2000));
-//
-//            let packet = Packet { operation: true, key, is_int: true, val: &[0] };
-//            dest_ip = ip_list_vec[((calculate_hash(&key) % num_nodes) + 1) as usize];
-//            send_get_packet(&dest_ip, &packet);
-//        }
-//            send_get_packet(&dest_ip, &packet);
-
 
 //
     } // the socket is closed here
