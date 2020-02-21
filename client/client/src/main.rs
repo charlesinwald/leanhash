@@ -1,4 +1,4 @@
-use std::net::{UdpSocket, ToSocketAddrs, SocketAddr, Ipv4Addr, IpAddr};
+use std::net::{UdpSocket, ToSocketAddrs, SocketAddr, Ipv4Addr, IpAddr, TcpStream};
 use std::{mem, thread, time};
 use std::env;
 use std::fs;
@@ -33,8 +33,6 @@ struct Cli {
     max_key: u32,
 }
 
-
-//TODO have enum so you can specify the type of data being saved in val, instead of assuming string
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct Packet<'a> {
@@ -111,6 +109,17 @@ fn main() -> std::io::Result<()> {
         //Retrieve list of ips
         let ip_list_string = fs::read_to_string("iplist").expect("Could not read in node ip list");
         let ip_list_vec = ip_list_string.split("\n").collect::<Vec<&str>>();
+        let tcp_vec : Vec<TcpStream> = vec![];
+        let mut iter = ip_list_vec.iter().enumerate();
+        iter.next(); //We want to skip the first one
+        for (i, ip) in iter {
+            println!("In position {} we have value {}", i, ip);
+            if let Ok(stream) = TcpStream::connect(ip) {
+                println!("Connected to {}", ip);
+            } else {
+                println!("Couldn't connect to {}", ip);
+            }
+        }
         let num_nodes: u64 = ip_list_vec.len() as u64 - 1;
         if num_nodes < 1 {
             eprintln!("Error: Less than two nodes found in iplist, format should be this node's AWS Elastic IP, and the elastic node ips [1..n]");

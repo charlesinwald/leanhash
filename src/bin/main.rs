@@ -67,7 +67,7 @@ fn main() {
     // Thread Safe version
     let mut cc: Arc<RwLock<HashMap<i32, Mutex<Val>>>> = Arc::new(RwLock::new(HashMap::new()));
 
-    let listener = TcpListener::bind("127.0.0.1:34254").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:34254").unwrap();
 
     let pool = ThreadPool::new(6);
 
