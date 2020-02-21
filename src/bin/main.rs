@@ -5,7 +5,7 @@ use structopt::StructOpt;
 use std::collections::HashMap;
 use config::Value;
 use std::string::ToString;
-use std::net::UdpSocket;
+use std::net::{UdpSocket, TcpListener, TcpStream};
 use std::str;
 
 use std::sync::{Mutex, RwLock, Arc, mpsc};
@@ -27,15 +27,10 @@ use std::hash::{Hasher, Hash};
 use std::borrow::{BorrowMut, Borrow};
 use std::convert::TryInto;
 use std::sync::mpsc::{Sender, Receiver, SyncSender};
-
-//#[derive(StructOpt)]
-//struct Cli {
-//    /// The pattern to look for
-//    #[structopt(default_value = "foobar", long)]
-//    operation: String,
-//}
+use std::io::{Read, Write};
 
 
+//Protocol for sending information over socket
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Packet<'a> {
     operation: bool,
@@ -45,6 +40,7 @@ struct Packet<'a> {
     val: &'a [u8],
 }
 
+//To make the hashmap generic
 #[derive(Serialize, Deserialize, PartialEq, Debug, Hash, Clone, Copy)]
 enum Val<'a> {
     String(&'a str),
@@ -58,88 +54,84 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 }
 
 fn main() {
-//    let args = Cli::from_args();
-//    println!("operation {}", &args.operation);
 
     //  Load Config
     let mut settings = config::Config::default();
     settings
-        // Add in `./iplist`
         .merge(config::File::with_name("Settings")).unwrap();
-    // Print out our settings (as a HashMap)
     let settings_map = settings.try_into::<HashMap<String, Vec<Value>>>().expect("Error reading iplist");
     let config_map = settings_map;
-//    println!("{:?}",
-//             config_map);
     let ip_array = config_map.get_key_value("ips").expect("Error reading list of node ips");
-//    println!("{:#?}", ip_array.1);
 
 
     // Thread Safe version
     let mut cc: Arc<RwLock<HashMap<i32, Mutex<Val>>>> = Arc::new(RwLock::new(HashMap::new()));
 
-    let socket = UdpSocket::bind("0.0.0.0:34254").expect("Error creating socket on 127.0.0.1:34254");
-    let mut buf = [0; 256];
+    let listener = TcpListener::bind("127.0.0.1:34254").unwrap();
 
     let pool = ThreadPool::new(6);
 
-
-    loop {
-        let sock = socket.try_clone().expect("Failed to clone socket");
-        //creates another pointer to the hash map and increases the atomic reference counter
+    for stream in listener.incoming() {
+        //We want a valid reference to the hashmap
         let map_clone = cc.clone();
-        match socket.recv_from(&mut buf) {
-            Ok((amt, src)) => {
-                pool.execute(move || {
-//                thread::spawn(move || {
-//                    println!("Handling connection from {}, {} bytes", src, amt);
-                    let filled_buf = &mut buf[..amt];
-                    let mut rec_packet: Packet = bincode::deserialize(&filled_buf).expect("Malformed Packet, unable to deserialize");
-//                    let map = map_clone.read().expect("RwLock poisoned");
-                    handlePacket(&sock, map_clone, src, rec_packet);
-                });
-            }
-            Err(e) => {
-                eprintln!("Couldn't recieve a datagram: {}", e);
-            }
-        }
+        let stream = stream.unwrap();
+        pool.execute(move || {
+            handle_packet(stream, map_clone);
+        })
     }
+//    loop {
+//        let sock = socket.try_clone().expect("Failed to clone socket");
+//        //creates another pointer to the hash map and increases the atomic reference counter
+//        let map_clone = cc.clone();
+//        match socket.recv_from(&mut buf) {
+//            Ok((amt, src)) => {
+//                pool.execute(move || {
+//                    let filled_buf = &mut buf[..amt];
+//                    let mut rec_packet: Packet = bincode::deserialize(&filled_buf).expect("Malformed Packet, unable to deserialize");
+//                    handlePacket(&sock, map_clone, src, rec_packet);
+//                });
+//            }
+//            Err(e) => {
+//                eprintln!("Couldn't recieve a datagram: {}", e);
+//            }
+//        }
+//    }
 }
 
-fn handlePacket(socket: &UdpSocket, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, RandomState>>>, src_addr: SocketAddr, mut rec_packet: Packet) -> () {
-//Put request
+fn handle_packet(mut stream: TcpStream, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, RandomState>>>) -> () {
+    println!("{:#?}", stream.peer_addr().unwrap());
+    let mut buffer = [0; 512];
+    stream.read(&mut buffer).unwrap();
+    let mut rec_packet: Packet = bincode::deserialize(&buffer).expect("Malformed Packet");
+
+    //Put request
     if rec_packet.operation == false {
         loop {
             let key = rec_packet.key.clone();
             let value;
-//                if !rec_packet.is_int {
-//                    value = Val::String(str::from_utf8(rec_packet.val).unwrap());
-//                } else {
             value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
             let map = cc.read().expect("RwLock poisoned");
             //Key exists
             if let Some(element) = map.get(&key) {
-//                println!("Exists");
                 drop(map); //Let go of lock
                 //Send "False", as a byte
-                socket.send_to(&[0], src_addr);
+                stream.write(&[0]);
                 break;
             }
             //Key doesn't exist
             else {
-//                println!("Doesn't exist");
                 //Drop read lock...
                 drop(map);
                 //...in favor of a write lock
                 let mut map = cc.write().expect("RwLock poisoned");
                 map.insert(key, Mutex::new(value));
                 //Send "True" as a byte
-                socket.send_to(&[1], src_addr);
+                stream.write(&[1]);
                 break;
             }
         }
     }
-    //Get request
+//    //Get request
     else {
         let key: i32 = rec_packet.key.clone();
         let map = cc.read().expect("RwLock poisoned");
@@ -147,14 +139,14 @@ fn handlePacket(socket: &UdpSocket, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, Rand
         match value {
             Some(x) => {
                 let packet = bincode::serialize(x).expect("invalid value");
-                socket.send_to(&packet, src_addr);
+                stream.write(&packet);
             }
             None => {
-//                println!("Value not found");
-                socket.send_to(&[0], src_addr);
+                stream.write(&[0]);
             }
         }
     }
+    stream.flush().unwrap();
 }
 
 
