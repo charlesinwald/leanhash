@@ -103,7 +103,7 @@ fn handle_packet(mut stream: TcpStream, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, 
     let mut buffer = [0; 512];
     stream.read(&mut buffer).unwrap();
     let mut rec_packet: Packet = bincode::deserialize(&buffer).expect("Malformed Packet");
-
+    println!("{:#?}", rec_packet);
     //Put request
     if rec_packet.operation == false {
         loop {
@@ -146,7 +146,7 @@ fn handle_packet(mut stream: TcpStream, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, 
             }
         }
     }
-    stream.flush().unwrap();
+//    stream.flush().unwrap();
 }
 
 
