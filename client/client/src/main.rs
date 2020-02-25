@@ -102,21 +102,21 @@ fn main() -> std::io::Result<()> {
         }
         let this_ip = ip_list_vec[0];
 
-        let mut tcp_vec = vec![];
-        let mut iter = ip_list_vec.iter().enumerate();
-        iter.next(); //We want to skip the first one, since its the local ip, and would appear twice
-        for (i, ip) in iter {
-            println!("In position {} we have value {}", i, ip);
-            let remote: SocketAddr = ip.parse().unwrap();
-            if let Ok(stream) = TcpStream::connect_timeout(&remote,Duration::from_secs(3)) {
-                stream.set_read_timeout(Some(Duration::from_secs(3)));
-                println!("Connected to {}", ip);
-                tcp_vec.push(stream);
-            } else {
-                println!("Couldn't connect to {}", ip);
-                process::exit(0x0100); //Quit
-            }
-        }
+//        let mut tcp_vec = vec![];
+//        let mut iter = ip_list_vec.iter().enumerate();
+//        iter.next(); //We want to skip the first one, since its the local ip, and would appear twice
+//        for (i, ip) in iter {
+//            println!("In position {} we have value {}", i, ip);
+//            let remote: SocketAddr = ip.parse().unwrap();
+//            if let Ok(stream) = TcpStream::connect_timeout(&remote,Duration::from_secs(3)) {
+//                stream.set_read_timeout(Some(Duration::from_secs(3)));
+//                println!("Connected to {}", ip);
+//                tcp_vec.push(stream);
+//            } else {
+//                println!("Couldn't connect to {}", ip);
+//                process::exit(0x0100); //Quit
+//            }
+//        }
 
 
         let max_key: u32 = args.max_key;
@@ -138,10 +138,9 @@ fn main() -> std::io::Result<()> {
         println!("Prepopulated Keys: {}", prepopulated_keys);
         for i in 0..prepopulated_keys {
             random_num = get_random_key(max_key);
-            let mut destination_node = &mut tcp_vec[(calculate_hash(&random_num) % num_nodes) as usize];
+            let mut destination_node = &mut TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
             let packet = Packet { operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
             println!("{:?}", send_put_packet(destination_node, &packet));
-            println!("Nodes {:?}, {:?}, {:?}", tcp_vec[0], tcp_vec[1], tcp_vec[2])
         }
 
 
@@ -149,7 +148,7 @@ fn main() -> std::io::Result<()> {
         while getNum > 0 {
             random_num = get_random_key(max_key);
             let packet = Packet { operation: true, key: random_num as i32, is_int: true, val: &[0] };
-            let mut destination_node = tcp_vec[(calculate_hash(&random_num) % num_nodes) as usize].try_clone().unwrap();
+            let mut destination_node = TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
 
             send_get_packet(destination_node, &packet);
             getNum = getNum - 1;
@@ -158,7 +157,7 @@ fn main() -> std::io::Result<()> {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .subsec_nanos() % max_key;
-                let mut destination_node = &mut tcp_vec[(calculate_hash(&random_num) % num_nodes) as usize].try_clone().unwrap();
+                let mut destination_node = &mut TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
                 let packet = Packet { operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
                 send_put_packet(destination_node, &packet);
                 putNum = putNum - 1;
