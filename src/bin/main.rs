@@ -72,13 +72,18 @@ fn main() {
     let pool = ThreadPool::new(6);
 
     for stream in listener.incoming() {
-        //We want a valid reference to the hashmap
-        let map_clone = cc.clone();
-        let stream = stream.unwrap();
-        pool.execute(move || {
-            handle_packet(stream, map_clone);
-        })
+        match stream {
+            Err(_) => println!("Listener error"),
+            Ok(mut stream) => {
+                //We want a valid reference to the hashmap
+                let map_clone = cc.clone();
+
+                pool.execute(move || {
+                    handle_packet(&mut stream, map_clone);
+                });
+            }
     }
+}
 //    loop {
 //        let sock = socket.try_clone().expect("Failed to clone socket");
 //        //creates another pointer to the hash map and increases the atomic reference counter
@@ -98,54 +103,54 @@ fn main() {
 //    }
 }
 
-fn handle_packet(mut stream: TcpStream, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, RandomState>>>) -> () {
-    println!("{:#?}", stream.peer_addr().unwrap());
-    let mut buffer = [0; 512];
-    stream.read(&mut buffer).unwrap();
-    let mut rec_packet: Packet = bincode::deserialize(&buffer).expect("Malformed Packet");
-    println!("{:#?}", rec_packet);
-    //Put request
-    if rec_packet.operation == false {
-        loop {
-            let key = rec_packet.key.clone();
-            let value;
-            value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-            let map = cc.read().expect("RwLock poisoned");
-            //Key exists
-            if let Some(element) = map.get(&key) {
-                drop(map); //Let go of lock
-                //Send "False", as a byte
-                stream.write(&[0]);
-                break;
-            }
-            //Key doesn't exist
-            else {
-                //Drop read lock...
-                drop(map);
-                //...in favor of a write lock
-                let mut map = cc.write().expect("RwLock poisoned");
-                map.insert(key, Mutex::new(value));
-                //Send "True" as a byte
-                stream.write(&[1]);
-                break;
-            }
-        }
-    }
+fn handle_packet( stream: & mut TcpStream, cc: Arc < RwLock < HashMap < i32, Mutex< Val >, RandomState > > > ) -> () {
+//    println!("{:#?}", stream.peer_addr().unwrap());
+let mut buffer = [0; 512];
+stream.read( & mut buffer).unwrap();
+let mut rec_packet: Packet = bincode::deserialize( & buffer).expect("Malformed Packet");
+println ! ("{:#?}", rec_packet);
+//Put request
+if rec_packet.operation == false {
+loop {
+let key = rec_packet.key.clone();
+let value;
+value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
+let map = cc.read().expect("RwLock poisoned");
+//Key exists
+if let Some(element) = map.get( & key) {
+drop(map); //Let go of lock
+//Send "False", as a byte
+stream.write( &[0]);
+break;
+}
+//Key doesn't exist
+else {
+//Drop read lock...
+drop(map);
+//...in favor of a write lock
+let mut map = cc.write().expect("RwLock poisoned");
+map.insert(key, Mutex::new(value));
+//Send "True" as a byte
+stream.write( & [1]);
+break;
+}
+}
+}
 //    //Get request
-    else {
-        let key: i32 = rec_packet.key.clone();
-        let map = cc.read().expect("RwLock poisoned");
-        let value = map.get(&key);
-        match value {
-            Some(x) => {
-                let packet = bincode::serialize(x).expect("invalid value");
-                stream.write(&packet);
-            }
-            None => {
-                stream.write(&[0]);
-            }
-        }
-    }
+else {
+let key: i32 = rec_packet.key.clone();
+let map = cc.read().expect("RwLock poisoned");
+let value = map.get( & key);
+match value {
+Some(x) => {
+let packet = bincode::serialize(x).expect("invalid value");
+stream.write( &packet);
+}
+None => {
+stream.write( & [0]);
+}
+}
+}
 //    stream.flush().unwrap();
 }
 
