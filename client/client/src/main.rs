@@ -57,10 +57,10 @@ enum Val<'a> {
 
 fn send_put_packet(dest: &mut TcpStream, packet: &Packet) -> i32 {
     let bytes_to_send = serialize(&packet).unwrap();
-    println!("{:?}", dest.write(&bytes_to_send));
+    dest.write(&bytes_to_send);
     let mut buf = [0; 256];
     dest.read(&mut buf);
-    println!("{:#?}", buf[0]);
+//    println!("{:#?}", buf[0]);
     if buf[0] != 0 {
 //        println!("true");
         return 1;
@@ -140,7 +140,7 @@ fn main() -> std::io::Result<()> {
             random_num = get_random_key(max_key);
             let mut destination_node = &mut TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
             let packet = Packet { operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
-            println!("{:?}", send_put_packet(destination_node, &packet));
+            send_put_packet(destination_node, &packet);
         }
 
 
