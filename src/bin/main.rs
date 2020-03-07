@@ -1,7 +1,7 @@
 extern crate config;
 extern crate disthashtable;
 
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use config::Value;
 use std::net::{TcpListener, TcpStream};
 use std::str;
@@ -11,11 +11,16 @@ use std::sync::{Mutex, RwLock, Arc};
 //The thread pool I wrote, its in a different crate for modularity
 //and saving time and RAM at compile time
 use disthashtable::ThreadPool;
+mod hash_map {
+    pub mod hash_map;
+}
 
 #[macro_use]
 extern crate serde_derive;
 extern crate bincode;
 
+//Used for settings only, not the one used in the RHT
+use std::collections::HashMap;
 use std::collections::hash_map::RandomState;
 use std::net::SocketAddr;
 use bincode::{serialize, deserialize};
@@ -60,11 +65,10 @@ fn main() {
     let config_map = settings_map;
     let ip_array = config_map.get_key_value("ips").expect("Error reading list of node ips");
 
-
     // Thread Safe version
-    let mut cc: Arc<RwLock<HashMap<i32, Mutex<Val>>>> = Arc::new(RwLock::new(HashMap::new()));
+    let mut cc : Arc<RwLock<hash_map::hash_map::hash_map<i32, Val>>> = Arc::new(RwLock::new(hash_map::hash_map::hash_map::new()));
 
-    let listener  = TcpListener::bind("0.0.0.0:34254").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:34254").unwrap();
 
     let pool = ThreadPool::new(6);
 
@@ -77,46 +81,39 @@ fn main() {
                 let map_clone = cc.clone();
 //                println!("{:?}", stream);
                 let mut buf = [0; 10];
-                    pool.execute(move || {
-                        handle_packet(&mut stream, map_clone);
-                    });
-                }
+                pool.execute(move || {
+                    handle_packet(&mut stream, map_clone);
+                });
             }
         }
     }
+}
 
 
-fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<HashMap<i32, Mutex<Val>, RandomState>>>) -> () {
-//    println!("{:#?}", stream.peer_addr().unwrap());
+fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<hash_map::hash_map::hash_map<i32, Val>>>) -> () {
     let mut buffer = [0; 512];
     stream.read(&mut buffer).unwrap();
     let mut rec_packet: Packet = bincode::deserialize(&buffer).expect("Malformed Packet");
-//    println!("{:#?}", rec_packet);
     //Put request
     if rec_packet.operation == false {
         loop {
             let key = rec_packet.key.clone();
             let value;
             value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-            let map = cc.read().expect("RwLock poisoned");
-            //Key exists
-            if let Some(element) = map.get(&key) {
-                drop(map); //Let go of lock
-                //Send "False", as a byte
-                stream.write(&[0]).expect("Error writing False to the stream");
-                break;
-            }
-            //Key doesn't exist
-            else {
-                //Drop read lock...
-                drop(map);
-                //...in favor of a write lock
-                let mut map = cc.write().expect("RwLock poisoned");
-                map.insert(key, Mutex::new(value));
-                //Send "True" as a byte
+            let mut map = cc.write().expect("RwLock poisoned");
+            //Attempt to acquire lock
+            let mut lock = map.entry(key).or_insert(value);
+//            if let Ok(ref mut mutex) = lock {
+//                **mutex = value;
+                //Send "True", as a byte
                 stream.write(&[1]).expect("Error writing True to the stream");
                 break;
-            }
+//            } else {
+//                println!("try_lock failed");
+//                //Send "True", as a byte
+//                stream.write(&[1]).expect("Error writing False to the stream");
+//                //No break, so it will try again until it can acquire the lock
+//            }
         }
     }
     //Get request

@@ -102,23 +102,6 @@ fn main() -> std::io::Result<()> {
         }
         let this_ip = ip_list_vec[0];
 
-//        let mut tcp_vec = vec![];
-//        let mut iter = ip_list_vec.iter().enumerate();
-//        iter.next(); //We want to skip the first one, since its the local ip, and would appear twice
-//        for (i, ip) in iter {
-//            println!("In position {} we have value {}", i, ip);
-//            let remote: SocketAddr = ip.parse().unwrap();
-//            if let Ok(stream) = TcpStream::connect_timeout(&remote,Duration::from_secs(3)) {
-//                stream.set_read_timeout(Some(Duration::from_secs(3)));
-//                println!("Connected to {}", ip);
-//                tcp_vec.push(stream);
-//            } else {
-//                println!("Couldn't connect to {}", ip);
-//                process::exit(0x0100); //Quit
-//            }
-//        }
-
-
         let max_key: u32 = args.max_key;
         //Workaround for not having a proper randomization function
         let mut random_num = get_random_key(max_key);
