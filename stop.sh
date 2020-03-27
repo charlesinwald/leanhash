@@ -1,2 +1,4 @@
-PID=$(/usr/sbin/lsof -ti:34254)
-sudo kill $PID
+echo "Stopping:"
+docker stop $(docker ps -a -q)
+echo "Removing:"
+docker rm $(docker ps -a -q)

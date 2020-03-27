@@ -35,8 +35,8 @@ use std::io::{Read, Write};
 //Protocol for sending information over socket
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Packet<'a> {
-    operation: bool,
-    //put = false, get = true
+    operation: i32,
+    //put = 0, get = 1, commit request = 2
     is_int: bool,
     key: i32,
     val: &'a [u8],
@@ -58,13 +58,13 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 fn main() {
 
     //  Load Config
-    let mut settings = config::Config::default();
+/*    let mut settings = config::Config::default();
     settings
         .merge(config::File::with_name("Settings")).unwrap();
     let settings_map = settings.try_into::<HashMap<String, Vec<Value>>>().expect("Error reading iplist");
     let config_map = settings_map;
     let ip_array = config_map.get_key_value("ips").expect("Error reading list of node ips");
-
+*/
     // Thread Safe version
     let mut cc : Arc<RwLock<hash_map::hash_map::hash_map<i32, Val>>> = Arc::new(RwLock::new(hash_map::hash_map::hash_map::new()));
 
@@ -95,19 +95,44 @@ fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<hash_map::hash_map::hash
     stream.read(&mut buffer).unwrap();
     let mut rec_packet: Packet = bincode::deserialize(&buffer).expect("Malformed Packet");
     //Put request
-    if rec_packet.operation == false {
+    if rec_packet.operation == 0 {
         loop {
             let key = rec_packet.key.clone();
             let value;
+            println!("{:#?}",rec_packet.key);
             value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-            let mut map = cc.write().expect("RwLock poisoned");
+            //Attempt to get a write lock on the value, blocking current thread until that happens
+            let lock = cc.try_write();
+             match lock {
+                //We've acquired the lock successfully
+                Ok(mut map) => {
+                    //Send "True", as a byte
+                    stream.write(&[1]).expect("Error writing True to the stream");
+                    //Wait for coordinator to tell us decision
+                    let mut decision = [0; 1];
+                    stream.read(&mut decision);
+                    //If answer is yes, commit the put
+                    if decision[0] == 1 {
+                        map.entry(key).or_insert(value);
+                        stream.write(&[1]).expect("Error writing True to the stream");
+                    }
+                    break;
+                },
+                Err(e) => {
+                    //Send false as a byte
+                    stream.write(&[0]).expect("Error writing False to the stream");
+                    continue;
+                }
+            };
+            // let mut map = cc.write().expect("RwLock poisoned");
+            
             //Attempt to acquire lock
-            let mut lock = map.entry(key).or_insert(value);
+            // let mut lock = map.entry(key).or_insert(value);
 //            if let Ok(ref mut mutex) = lock {
 //                **mutex = value;
                 //Send "True", as a byte
-                stream.write(&[1]).expect("Error writing True to the stream");
-                break;
+                // stream.write(&[1]).expect("Error writing True to the stream");
+                // break;
 //            } else {
 //                println!("try_lock failed");
 //                //Send "True", as a byte

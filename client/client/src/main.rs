@@ -36,8 +36,8 @@ struct Cli {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 struct Packet<'a> {
-    operation: bool,
-    //put = false, get = true
+    operation: i32,
+    //put = 0, get = 1, commit request = 2
     is_int: bool,
     key: i32,
     val: &'a [u8],
@@ -55,19 +55,37 @@ enum Val<'a> {
     Integer(i32),
 }
 
-fn send_put_packet(dest: &mut TcpStream, packet: &Packet) -> i32 {
+fn send_put_packet(dest: &mut TcpStream, dest2: &mut TcpStream, dest3: &mut TcpStream, packet: &Packet) -> i32 {
     let bytes_to_send = serialize(&packet).unwrap();
+    //Phase 1, first node, ask to put
     dest.write(&bytes_to_send);
-    let mut buf = [0; 256];
-    dest.read(&mut buf);
-//    println!("{:#?}", buf[0]);
-    if buf[0] != 0 {
-//        println!("true");
-        return 1;
+    let (mut ack, mut ack2, mut ack3) = ([0; 1], [0; 1], [0; 1]);
+    dest.read(&mut ack);
+    //If first node says yes keep going
+    if ack[0] == 1 {
+        dest2.write(&bytes_to_send);
+        dest2.read(&mut ack2);
+        //If second node says yes keep going
+        if ack2[0] == 1 {
+            dest3.write(&bytes_to_send);
+            dest3.read(&mut ack3);
+            if ack3[0] == 1 {
+                //All nodes are okay with decision, reply to proceed
+                dest.write(&[1]).expect("Error writing True to the stream");
+                dest2.write(&[1]).expect("Error writing True to the stream");
+                dest3.write(&[1]).expect("Error writing True to the stream");
+                return 1;
+            }
+            else {
+                return 0;
+            }
+        } else {
+            return 0;
+        }
     } else {
-//        println!("false");
         return 0;
     }
+    return 0;
 }
 
 fn send_get_packet(mut dest: TcpStream, packet: &Packet) -> i32 {
@@ -100,7 +118,6 @@ fn main() -> std::io::Result<()> {
             eprintln!("Error: Less than two nodes found in iplist, format should be this node's AWS Elastic IP, and the elastic node ips [1..n]");
             std::process::exit(1);
         }
-        let this_ip = ip_list_vec[0];
 
         let max_key: u32 = args.max_key;
         //Workaround for not having a proper randomization function
@@ -121,16 +138,27 @@ fn main() -> std::io::Result<()> {
         println!("Prepopulated Keys: {}", prepopulated_keys);
         for i in 0..prepopulated_keys {
             random_num = get_random_key(max_key);
-            let mut destination_node = &mut TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
-            let packet = Packet { operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
-            send_put_packet(destination_node, &packet);
+            let destip = ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize];
+            println!("Node {}", destip);
+            let mut destination_node = &mut TcpStream::connect(destip).unwrap();
+            //First replica
+            let destip2 = (ip_list_vec[((calculate_hash(&random_num)) + 1) as usize % num_nodes as usize]);
+            println!("  Replica 1 {}", destip2);
+            let mut destination_node2 = &mut TcpStream::connect(destip2).unwrap();
+            //Second Replica
+            let destip3 = (ip_list_vec[((calculate_hash(&random_num)) + 2) as usize % num_nodes as usize]);
+            println!("  Replica 2 {}", destip3);
+            let mut destination_node3 = &mut TcpStream::connect(destip3).unwrap();
+
+            let packet = Packet { operation: 0, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
+            send_put_packet(destination_node, destination_node2, destination_node3, &packet);
         }
 
 
         let start = Instant::now();
         while getNum > 0 {
             random_num = get_random_key(max_key);
-            let packet = Packet { operation: true, key: random_num as i32, is_int: true, val: &[0] };
+            let packet = Packet { operation: 1, key: random_num as i32, is_int: true, val: &[0] };
             let mut destination_node = TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
 
             send_get_packet(destination_node, &packet);
@@ -141,8 +169,10 @@ fn main() -> std::io::Result<()> {
                     .unwrap()
                     .subsec_nanos() % max_key;
                 let mut destination_node = &mut TcpStream::connect(ip_list_vec[(calculate_hash(&random_num) % num_nodes) as usize]).unwrap();
-                let packet = Packet { operation: false, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
-                send_put_packet(destination_node, &packet);
+                let mut destination_node2 = &mut TcpStream::connect((ip_list_vec[((calculate_hash(&random_num)) + 1) as usize % num_nodes as usize])).unwrap();
+                let mut destination_node3 = &mut TcpStream::connect((ip_list_vec[((calculate_hash(&random_num)) + 2) as usize % num_nodes as usize])).unwrap();
+                let packet = Packet { operation: 0, key: random_num as i32, is_int: true, val: &random_num.to_ne_bytes() };
+                send_put_packet(destination_node, destination_node2, destination_node3, &packet);
                 putNum = putNum - 1;
             }
         }
