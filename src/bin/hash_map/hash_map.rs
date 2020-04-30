@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::mem;
-const INITIAL_NBUCKETS: usize = 3;
+const INITIAL_NBUCKETS: usize = 50;
 
 pub struct hash_map<K, V> {
     buckets: Vec<Vec<(K, V)>>,

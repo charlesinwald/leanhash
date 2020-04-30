@@ -36,12 +36,19 @@ use std::io::{Read, Write};
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Packet<'a> {
     operation: i32,
-    //put = 0, get = 1, commit request = 2
+    //put = 0, get = 1, multiput = 2
     is_int: bool,
     key: i32,
     val: &'a [u8],
 }
 
+//Protocol for sending information over socket
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+struct MultiPacket<'a> {
+    has_next: bool, //if this node has 3 keys to update
+    key: i32,
+    val: &'a [u8],
+}
 //To make the hashmap generic
 #[derive(Serialize, Deserialize, PartialEq, Debug, Hash, Clone, Copy)]
 enum Val<'a> {
@@ -56,15 +63,6 @@ fn calculate_hash<T: Hash>(t: &T) -> u64 {
 }
 
 fn main() {
-
-    //  Load Config
-/*    let mut settings = config::Config::default();
-    settings
-        .merge(config::File::with_name("Settings")).unwrap();
-    let settings_map = settings.try_into::<HashMap<String, Vec<Value>>>().expect("Error reading iplist");
-    let config_map = settings_map;
-    let ip_array = config_map.get_key_value("ips").expect("Error reading list of node ips");
-*/
     // Thread Safe version
     let mut cc : Arc<RwLock<hash_map::hash_map::hash_map<i32, Val>>> = Arc::new(RwLock::new(hash_map::hash_map::hash_map::new()));
 
@@ -99,9 +97,8 @@ fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<hash_map::hash_map::hash
         loop {
             let key = rec_packet.key.clone();
             let value;
-            println!("{:#?}",rec_packet.key);
+            // println!("{:#?}",rec_packet.key);
             value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
-            //Attempt to get a write lock on the value, blocking current thread until that happens
             let lock = cc.try_write();
              match lock {
                 //We've acquired the lock successfully
@@ -124,24 +121,58 @@ fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<hash_map::hash_map::hash
                     continue;
                 }
             };
-            // let mut map = cc.write().expect("RwLock poisoned");
-            
-            //Attempt to acquire lock
-            // let mut lock = map.entry(key).or_insert(value);
-//            if let Ok(ref mut mutex) = lock {
-//                **mutex = value;
-                //Send "True", as a byte
-                // stream.write(&[1]).expect("Error writing True to the stream");
-                // break;
-//            } else {
-//                println!("try_lock failed");
-//                //Send "True", as a byte
-//                stream.write(&[1]).expect("Error writing False to the stream");
-//                //No break, so it will try again until it can acquire the lock
-//            }
         }
     }
-    //Get request
+    //Multiput request
+    else if rec_packet.operation == 2 {
+        loop {
+            //Get Second Key/Value pair as multipacket
+            let mut buffer2 = [0; 512];
+            stream.read(&mut buffer2).unwrap();
+            let key = rec_packet.key.clone();
+            let mut rec_packet2: MultiPacket = bincode::deserialize(&buffer2).expect("Malformed Packet");
+            let key2 = rec_packet2.key.clone();
+            // println!("{:#?}",rec_packet.key);
+            let value = Val::Integer(i32::from_ne_bytes(rec_packet.val.try_into().expect("slice with incorrect length")));
+            let value2 = Val::Integer(i32::from_ne_bytes(rec_packet2.val.try_into().expect("slice with incorrect length")));
+
+            //Attempt to get a write lock on the value, blocking current thread until that happens
+            let lock = cc.try_write();
+            match lock {
+                //We've acquired the lock successfully
+                Ok(mut map) => {
+                    //Send "True", as a byte
+                    stream.write(&[1]).expect("Error writing True to the stream");
+                    //Wait for coordinator to tell us decision
+                    let mut decision = [0; 1];
+                    stream.read(&mut decision);
+                    //If answer is yes, commit the put
+                    if decision[0] == 1 {
+                        map.entry(key).or_insert(value);
+                        map.entry(key2).or_insert(value2);
+                        if rec_packet2.has_next {
+                            //Get Third Key/Value pair as multipacket
+                            let mut buffer3 = [0; 512];
+                            stream.read(&mut buffer3).unwrap();
+                            let mut rec_packet3: MultiPacket = bincode::deserialize(&buffer3).expect("Malformed Packet");
+                            let key3 = rec_packet3.key.clone();
+                            let value3 = Val::Integer(i32::from_ne_bytes(rec_packet3.val.try_into().expect("slice with incorrect length")));
+                            map.entry(key3).or_insert(value3);
+                        }
+                        stream.write(&[1]).expect("Error writing True to the stream");
+                    }
+                    break;
+                },
+                Err(e) => {
+                    //Send false as a byte
+                    stream.write(&[0]).expect("Error writing False to the stream");
+                    continue;
+                }
+            };
+        }
+    }
+
+        //Get request
     else {
         let key: i32 = rec_packet.key.clone();
         let map = cc.read().expect("RwLock poisoned");
@@ -156,7 +187,6 @@ fn handle_packet(stream: &mut TcpStream, cc: Arc<RwLock<hash_map::hash_map::hash
             }
         }
     }
-//    stream.flush().unwrap();
 }
 
 
