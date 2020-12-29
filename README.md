@@ -1,4 +1,5 @@
-﻿   ![enter image description here](https://i.imgur.com/bS7iidD.png)
+﻿   ![](https://i.imgur.com/bS7iidD.png)
+    
 Lightweight, distributed, hashtable written in Rust.  Designed to be run on a cluster of AWS instances.
 Implements a basic consensus protocol.  Can also be used with Docker for testing purposes.
 
